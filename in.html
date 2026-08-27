@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>풍선 터트리기 게임</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(to bottom, #87CEEB, #E0F6FF);
+            touch-action: manipulation;
+        }
+
+        /* 상단 점수판 */
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .score-board {
+            background: rgba(255, 255, 255, 0.85);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 게임 영역 */
+        #game-area {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* 풍선 스타일 */
+        .balloon {
+            position: absolute;
+            bottom: -100px;
+            width: 60px;
+            height: 75px;
+            border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+            cursor: pointer;
+            animation: floatUp linear forwards;
+        }
+
+        /* 풍선 매듭 */
+        .balloon::after {
+            content: "";
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 8px solid inherit;
+            border-bottom-color: currentColor;
+        }
+
+        /* 풍선 실 */
+        .balloon::before {
+            content: "";
+            position: absolute;
+            bottom: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 15px;
+            background-color: rgba(0, 0, 0, 0.2);
+        }
+
+        /* 풍선이 위로 올라가는 애니메이션 */
+        @keyframes floatUp {
+            0% {
+                bottom: -100px;
+            }
+            100% {
+                bottom: 105vh;
+            }
+        }
+
+        /* 터지는 애니메이션 효과 */
+        .pop {
+            animation: popEffect 0.15s ease-out forwards !important;
+            pointer-events: none;
+        }
+
+        @keyframes popEffect {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.4);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(0);
+                opacity: 0;
+            }
+        }
+
+        /* 게임 오버/시작 화면 overlay */
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 20;
+        }
+
+        #overlay h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        #start-btn {
+            margin-top: 20px;
+            padding: 12px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #FF5722;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            transition: transform 0.1s;
+        }
+
+        #start-btn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-container">
+        <div class="score-board">점수: <span id="score">0</span></div>
+        <div class="score-board">남은 기회: <span id="lives">5</span></div>
+    </div>
+
+    <div id="game-area"></div>
+
+    <div id="overlay">
+        <h1 id="game-title">풍선 터트리기</h1>
+        <p id="game-desc">화면에 나타나는 풍선을 터트려 점수를 올리세요!</p>
+        <button id="start-btn" onclick="startGame()">게임 시작</button>
+    </div>
+
+    <script>
+        const gameArea = document.getElementById('game-area');
+        const scoreEl = document.getElementById('score');
+        const livesEl = document.getElementById('lives');
+        const overlay = document.getElementById('overlay');
+        const gameTitle = document.getElementById('game-title');
+        const gameDesc = document.getElementById('game-desc');
+        const startBtn = document.getElementById('start-btn');
+
+        let score = 0;
+        let lives = 5;
+        let gameInterval = null;
+        let isPlaying = false;
+        let spawnSpeed = 1000; // 풍선 생성 주기 (밀리초)
+
+        const colors = ['#FF5722', '#E91E63', '#9C27B0', '#2196F3', '#4CAF50', '#FFEB3B'];
+
+        // 게임 시작/재시작
+        function startGame() {
+            score = 0;
+            lives = 5;
+            spawnSpeed = 1000;
+            scoreEl.textContent = score;
+            livesEl.textContent = lives;
+            gameArea.innerHTML = '';
+            overlay.style.display = 'none';
+            isPlaying = true;
+
+            if (gameInterval) clearInterval(gameInterval);
+            gameInterval = setInterval(spawnBalloon, spawnSpeed);
+        }
+
+        // 풍선 생성
+        function spawnBalloon() {
+            if (!isPlaying) return;
+
+            const balloon = document.createElement('div');
+            balloon.classList.add('balloon');
+
+            // 무작위 색상 지정
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            balloon.style.backgroundColor = randomColor;
+            balloon.style.color = randomColor;
+
+            // 무작위 X축 위치 (10% ~ 85%)
+            const randomX = Math.random() * 75 + 10;
+            balloon.style.left = `${randomX}vw`;
+
+            // 무작위 이동 속도 (3초 ~ 6초)
+            const duration = Math.random() * 3 + 3;
+            balloon.style.animationDuration = `${duration}s`;
+
+            // 터치/클릭 이벤트 바인딩
+            const popHandler = (e) => {
+                e.preventDefault();
+                if (!balloon.classList.contains('pop')) {
+                    popBalloon(balloon);
+                }
+            };
+
+            balloon.addEventListener('touchstart', popHandler, { passive: false });
+            balloon.addEventListener('mousedown', popHandler);
+
+            // 화면 맨 위까지 놓쳤을 때
+            balloon.addEventListener('animationend', (e) => {
+                if (e.animationName === 'floatUp') {
+                    balloon.remove();
+                    loseLife();
+                }
+            });
+
+            gameArea.appendChild(balloon);
+
+            // 점수가 올라갈수록 풍선 나오는 속도 가속
+            if (score > 10 && spawnSpeed > 600) {
+                updateSpawnSpeed(600);
+            } else if (score > 25 && spawnSpeed > 400) {
+                updateSpawnSpeed(400);
+            }
+        }
+
+        function updateSpawnSpeed(newSpeed) {
+            spawnSpeed = newSpeed;
+            clearInterval(gameInterval);
+            gameInterval = setInterval(spawnBalloon, spawnSpeed);
+        }
+
+        // 풍선 터트림 처리
+        function popBalloon(balloon) {
+            balloon.classList.add('pop');
+            score += 10;
+            scoreEl.textContent = score;
+
+            setTimeout(() => {
+                balloon.remove();
+            }, 150);
+        }
+
+        // 풍선을 놓쳤을 때 기회 차감
+        function loseLife() {
+            if (!isPlaying) return;
+
+            lives--;
+            livesEl.textContent = lives;
+
+            if (lives <= 0) {
+                gameOver();
+            }
+        }
+
+        // 게임 오버
+        function gameOver() {
+            isPlaying = false;
+            clearInterval(gameInterval);
+
+            // 남은 풍선 제거
+            const remainingBalloons = document.querySelectorAll('.balloon');
+            remainingBalloons.forEach(b => b.remove());
+
+            gameTitle.textContent = '게임 오버!';
+            gameDesc.textContent = `최종 점수: ${score}점`;
+            startBtn.textContent = '다시 하기';
+            overlay.style.display = 'flex';
+        }
+    </script>
+</body>
+</html>
